@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -42,6 +42,8 @@ import {
   Cell,
 } from "recharts";
 import Logo from "@/img/favicon.jpeg";
+import { Label } from "@/components/ui/label";
+import SpotifyWebApi from "spotify-web-api-node";
 
 interface ListeningEntry {
   ts: string;
@@ -82,11 +84,21 @@ const COLORS = [
   "#82ca9d",
 ];
 
+// Initialize Spotify API
+const spotifyApi = new SpotifyWebApi({
+  clientId: "fff5fda968834ab8a5437e9e75f9cdd8",
+  redirectUri: "https://unwindify.vercel.app/home-page/callback",
+});
+
+const SPOTIFY_SCOPES = ["user-read-recently-played", "user-top-read"];
+
 const App = () => {
   const [listeningData, setListeningData] = useState<ListeningEntry[]>([]);
-  const [sortByListens, setSortByListens] = useState(false);
+  const [sortMethod, setSortMethod] = useState<"oldest" | "newest" | "listens">(
+    "oldest"
+  );
   const [page, setPage] = useState(1);
-  const itemsPerPage = 30;
+  const itemsPerPage = 10;
   const [originalData, setOriginalData] = useState<ListeningEntry[]>([]);
   const [trackListenCounts, setTrackListenCounts] = useState<
     Map<string, { count: number; entry: ListeningEntry; totalMsPlayed: number }>
@@ -109,6 +121,79 @@ const App = () => {
   const [timeOfDayData, setTimeOfDayData] = useState<
     { hour: string; minutes: number }[]
   >([]);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userProfile, setUserProfile] = useState<any>(null);
+
+  // Check for access token on initial load
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const accessToken = params.get("access_token");
+    const expiresIn = params.get("expires_in");
+
+    if (accessToken) {
+      spotifyApi.setAccessToken(accessToken);
+      setIsAuthenticated(true);
+      fetchUserProfile();
+      fetchRecentHistory();
+
+      // Clear token from URL
+      window.history.pushState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
+  const handleSpotifyLogin = () => {
+    const authUrl = `https://accounts.spotify.com/authorize?client_id=${
+      process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID
+    }&redirect_uri=${encodeURIComponent(
+      process.env.NEXT_PUBLIC_SPOTIFY_REDIRECT_URI || ""
+    )}&scope=${SPOTIFY_SCOPES.join(
+      "%20"
+    )}&response_type=token&show_dialog=true`;
+    window.location.href = authUrl;
+  };
+
+  const fetchUserProfile = async () => {
+    try {
+      const data = await spotifyApi.getMe();
+      setUserProfile(data.body);
+    } catch (err) {
+      console.error("Failed to fetch user profile:", err);
+    }
+  };
+
+  const fetchRecentHistory = async () => {
+    try {
+      // Get recently played tracks
+      const recentTracks = await spotifyApi.getMyRecentlyPlayedTracks({
+        limit: 50,
+      });
+
+      // Convert to your ListeningEntry format
+      const historyData = recentTracks.body.items.map((item) => ({
+        ts: item.played_at,
+        platform: "spotify",
+        ms_played: item.track.duration_ms,
+        master_metadata_track_name: item.track.name,
+        master_metadata_album_artist_name: item.track.artists[0]?.name,
+        master_metadata_album_album_name: item.track.album.name,
+        spotify_track_uri: item.track.uri,
+        reason_start: "playback",
+        reason_end: "trackdone",
+        shuffle: false,
+        skipped: false,
+        offline: false,
+        offline_timestamp: null,
+        incognito_mode: false,
+      }));
+
+      setOriginalData(historyData);
+      setListeningData(historyData);
+      calculateArtistStats(historyData);
+      calculateChartData(historyData);
+    } catch (err) {
+      console.error("Failed to fetch recent history:", err);
+    }
+  };
 
   const calculateChartData = (data: ListeningEntry[]) => {
     const monthlyMap = new Map<string, number>();
@@ -168,6 +253,15 @@ const App = () => {
             parseInt(a.hour.split(":")[0]) - parseInt(b.hour.split(":")[0])
         )
     );
+  };
+
+  const sortByNewest = () => {
+    const sortedByDate = [...originalData].sort(
+      (a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime()
+    );
+    setListeningData(sortedByDate);
+    setSortMethod("newest");
+    setPage(1);
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -256,6 +350,7 @@ const App = () => {
   };
 
   const sortByMostListens = () => {
+    setSortMethod("listens");
     const counts = new Map<
       string,
       { count: number; entry: ListeningEntry; totalMsPlayed: number }
@@ -281,7 +376,7 @@ const App = () => {
 
     setListeningData(sortedByListens);
     setTrackListenCounts(counts);
-    setSortByListens(true);
+    setPage(1);
   };
 
   const sortByOldest = () => {
@@ -289,7 +384,8 @@ const App = () => {
       (a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime()
     );
     setListeningData(sortedByDate);
-    setSortByListens(false);
+    setSortMethod("oldest");
+    setPage(1);
   };
 
   const totalMsPlayed = listeningData.reduce(
@@ -311,81 +407,121 @@ const App = () => {
       newPage <= Math.ceil(listeningData.length / itemsPerPage)
     ) {
       setPage(newPage);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
 
   return (
-    <div style={{ padding: "20px", fontFamily: "Arial, sans-serif" }}>
-      <div className="flex justify-start">
-        <img src={Logo.src} alt="Logo" />
-      </div>
-      <div className="flex justify-end" id="top">
-        <DropdownMenu>
-          <DropdownMenuTrigger>
-            <Avatar className="bg-black">
-              <AvatarImage src="https://imgs.search.brave.com/FwvslqIfrJSkk_ce4dcoqQ-eCB4CoZ1iJQUytek5GFA/rs:fit:500:0:0:0/g:ce/aHR0cHM6Ly91cGxv/YWQud2lraW1lZGlh/Lm9yZy93aWtpcGVk/aWEvY29tbW9ucy8x/LzE5L1Nwb3RpZnlf/bG9nb193aXRob3V0/X3RleHQuc3Zn" />
-              <AvatarFallback>CN</AvatarFallback>
-            </Avatar>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuLabel>My Account</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>Profile</DropdownMenuItem>
-            <DropdownMenuItem>
-              <a
-                href="https://open.spotify.com"
-                className="flex justify-between"
-                target="_blank"
-              >
-                My Spotify
-                {<ExternalLink className="size-3" />}
-              </a>
-            </DropdownMenuItem>
-            <DropdownMenuItem>Help</DropdownMenuItem>
-            <DropdownMenuItem>Sign Out</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+    <div className="p-4 md:p-6 font-sans max-w-7xl mx-auto">
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+        <div className="flex items-center">
+          <img src={Logo.src} alt="Logo" className="h-10 w-auto rounded-lg" />
+          <Label> </Label>
+        </div>
+        <div className="flex items-center gap-4">
+          {userProfile && (
+            <div className="hidden md:flex items-center gap-2">
+              <Avatar>
+                <AvatarImage
+                  src={
+                    userProfile.images?.[0]?.url ||
+                    "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRslcO84eWfXP_4Ucd4Yfz6B8uqJmHaTo0iTw&s"
+                  }
+                />
+                <AvatarFallback>
+                  {userProfile.display_name?.charAt(0) || "U"}
+                </AvatarFallback>
+              </Avatar>
+              <span>{userProfile.display_name}</span>
+            </div>
+          )}
+          {!isAuthenticated ? (
+            <Button onClick={handleSpotifyLogin}>Connect Spotify</Button>
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger>
+                <Avatar className="bg-white">
+                  <AvatarImage
+                    className="bg-white"
+                    src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRslcO84eWfXP_4Ucd4Yfz6B8uqJmHaTo0iTw&s"
+                  />
+                  <AvatarFallback>CN</AvatarFallback>
+                </Avatar>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem>Profile</DropdownMenuItem>
+                <DropdownMenuItem>
+                  <a
+                    href="https://open.spotify.com"
+                    className="flex justify-between"
+                    target="_blank"
+                  >
+                    My Spotify
+                    {<ExternalLink className="size-3" />}
+                  </a>
+                </DropdownMenuItem>
+                <DropdownMenuItem>Help</DropdownMenuItem>
+                <DropdownMenuItem>Sign Out</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
       </div>
 
-      <div className="flex justify-center mt-3">
-        <input
-          type="file"
-          accept=".json"
-          multiple
-          onChange={handleFileUpload}
-          className="border border-gray-200 p-2 rounded-md"
-        />
-      </div>
-      <div className="p-5 flex justify-center">
-        <p className="opacity-50">
-          <a href="../howto-page">
-            How to get my <strong>extended</strong> listening history?
+      {/* File Upload Section */}
+      <div className="flex flex-col items-center mt-4 gap-4">
+        {!isAuthenticated ? (
+          <Button onClick={handleSpotifyLogin} className="w-full max-w-md">
+            Connect Spotify to view your recent history
+          </Button>
+        ) : (
+          <Button
+            onClick={fetchRecentHistory}
+            variant="outline"
+            className="w-full max-w-md"
+          >
+            Refresh Recent History
+          </Button>
+        )}
+
+        <p className="opacity-50 text-sm md:text-base text-center">
+          Or{" "}
+          <input
+            type="file"
+            accept=".json"
+            multiple
+            onChange={handleFileUpload}
+            className="border-b border-gray-400 bg-transparent cursor-pointer"
+          />{" "}
+          your extended history
+        </p>
+        <p className="opacity-50 text-sm md:text-base text-center">
+          Need Help?{" "}
+          <a href="../howto-page" className="hover:underline">
+            <em>
+              How to get my <strong>extended</strong> listening history?
+            </em>
           </a>
         </p>
       </div>
 
-      <div className="flex justify-center mt-3 gap-4">
-        <Card className="w-2/5">
+      {/* Stats Card */}
+      <div className="flex justify-center mt-6">
+        <Card className="w-full md:w-4/5 lg:w-2/3 bg-[#1ed75fd0] hover:shadow-lg">
           <CardHeader>
-            <CardTitle>Graphs!</CardTitle>
-            <CardDescription>Your Spotify Listening History</CardDescription>
+            <CardTitle>Your Spotify Listening History</CardTitle>
+            <CardDescription></CardDescription>
           </CardHeader>
-          <CardContent>
-            <h3>The graphs show:</h3>
-            <ol>
-              <li>Your listening per month</li>
-              <li>Your pickiness (aka skip rate)</li>
-              <li>Time of day listening weight</li>
-            </ol>
-          </CardContent>
-          <CardContent>
-            <p>Total Minutes Played: {totalMinutesPlayed.toFixed(2)}</p>
-            <p>Total Tracks Played: {totalTracksPlayed}</p>
+          <CardContent className="space-y-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
+              <p>Total Minutes Played: {totalMinutesPlayed.toFixed(0)}</p>
+              <p>Total Tracks Played: {totalTracksPlayed}</p>
+            </div>
           </CardContent>
           <CardFooter className="flex justify-between">
-            <p>
-              <strong>Demo</strong>
-            </p>
             <Button
               onClick={() => setShowGraphs(!showGraphs)}
               variant="outline"
@@ -398,15 +534,16 @@ const App = () => {
         </Card>
       </div>
 
+      {/* Graphs Section */}
       {showGraphs && (
         <div className="space-y-6 mt-6">
           {monthlyData.length > 0 && (
             <div className="flex justify-center">
-              <Card className="w-2/3">
+              <Card className="w-full md:w-4/5 lg:w-2/3">
                 <CardHeader>
                   <CardTitle>Monthly Listening Time</CardTitle>
                 </CardHeader>
-                <CardContent className="h-[400px]">
+                <CardContent className="h-[300px] sm:h-[400px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={monthlyData}>
                       <CartesianGrid strokeDasharray="3 3" />
@@ -441,11 +578,11 @@ const App = () => {
 
           {monthlySkipData.length > 0 && (
             <div className="flex justify-center">
-              <Card className="w-2/3">
+              <Card className="w-full md:w-4/5 lg:w-2/3">
                 <CardHeader>
                   <CardTitle>Pickiness Chart (Skipped Songs)</CardTitle>
                 </CardHeader>
-                <CardContent className="h-[400px]">
+                <CardContent className="h-[300px] sm:h-[400px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={monthlySkipData}>
                       <CartesianGrid strokeDasharray="3 3" />
@@ -483,11 +620,11 @@ const App = () => {
 
           {timeOfDayData.length > 0 && (
             <div className="flex justify-center">
-              <Card className="w-2/3">
+              <Card className="w-full md:w-4/5 lg:w-2/3">
                 <CardHeader>
                   <CardTitle>Listening Time by Hour of Day</CardTitle>
                 </CardHeader>
-                <CardContent className="h-[600px]">
+                <CardContent className="h-[400px] sm:h-[500px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
@@ -495,7 +632,7 @@ const App = () => {
                         cx="50%"
                         cy="50%"
                         labelLine={false}
-                        outerRadius={150}
+                        outerRadius={120}
                         fill="#8884d8"
                         dataKey="minutes"
                         nameKey="hour"
@@ -525,13 +662,14 @@ const App = () => {
         </div>
       )}
 
+      {/* Longest Stretch Section */}
       {longestStretch && (
         <div className="flex justify-center mt-6">
-          <Card className="w-2/3">
+          <Card className="w-full md:w-4/5 lg:w-2/3 bg-[#1ed75fd0] hover:shadow-lg">
             <CardHeader>
               <CardTitle>Longest Stretch Between Listening</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-2">
               <p>
                 <strong>Start:</strong> {formatDate(longestStretch.start)}
               </p>
@@ -539,7 +677,7 @@ const App = () => {
                 <strong>End:</strong> {formatDate(longestStretch.end)}
               </p>
               <p>
-                <strong>Duration:</strong> {longestStretch.minutes.toFixed(2)}{" "}
+                <strong>Duration:</strong> {longestStretch.minutes.toFixed(0)}{" "}
                 minutes
               </p>
             </CardContent>
@@ -547,75 +685,103 @@ const App = () => {
         </div>
       )}
 
-      <h2 className="font-bold flex justify-center mt-3 text-[20px]">
-        All Listening Entries
-      </h2>
-      <Button
-        className="mt-8 mb-4"
-        onClick={sortByListens ? sortByOldest : sortByMostListens}
-      >
-        {sortByListens ? "Sort by Oldest" : "Sort by Most Listens"}
-      </Button>
-      <ol className="list-decimal">
-        {paginatedData.map((entry, index) => (
-          <li
-            key={index}
-            className="border border-gray-200 m-4 rounded-md shadow-md p-3 w-1/2"
+      {/* Listening Entries Section */}
+      <div className="mt-8">
+        <h2 className="font-bold text-center text-xl md:text-2xl mb-4">
+          All Listening Entries
+        </h2>
+        <div className="flex justify-center">
+          <Button
+            onClick={() => {
+              if (sortMethod === "oldest") sortByNewest();
+              else if (sortMethod === "newest") sortByMostListens();
+              else sortByOldest();
+            }}
+            className="mb-6"
           >
-            <a
-              href={`https://open.spotify.com/search/${entry.master_metadata_track_name}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {entry.master_metadata_track_name} by{" "}
-              {entry.master_metadata_album_artist_name} -{" "}
-              {msToMinutes(entry.ms_played).toFixed(2)} min
-              {!sortByListens && <span> ({formatDate(entry.ts)})</span>}
-              {sortByListens && (
-                <span>
-                  {" "}
-                  (Listened{" "}
-                  {trackListenCounts.get(entry.spotify_track_uri)?.count} times,
-                  Total:{" "}
-                  {msToMinutes(
-                    trackListenCounts.get(entry.spotify_track_uri)
-                      ?.totalMsPlayed || 0
-                  ).toFixed(2)}{" "}
-                  min)
-                </span>
-              )}
-            </a>
-          </li>
-        ))}
-      </ol>
+            {sortMethod === "oldest" && "Sort by Newest"}
+            {sortMethod === "newest" && "Sort by Most Listens"}
+            {sortMethod === "listens" && "Sort by Oldest"}
+          </Button>
+        </div>
 
-      <Pagination id="bottom">
-        <PaginationContent>
-          <PaginationItem>
-            <PaginationPrevious
-              className={`cursor-pointer ${
-                page === 1 ? "opacity-50 pointer-events-none" : ""
-              }`}
-              onClick={() => handlePageChange(page - 1)}
-            />
-          </PaginationItem>
-          <PaginationItem>
-            <span className="cursor-default">
-              Page {page} of {Math.ceil(listeningData.length / itemsPerPage)}
-            </span>
-          </PaginationItem>
-          <PaginationItem>
-            <PaginationNext
-              className={`cursor-pointer ${
-                page === Math.ceil(listeningData.length / itemsPerPage)
-                  ? "opacity-50 pointer-events-none"
-                  : ""
-              }`}
-              onClick={() => handlePageChange(page + 1)}
-            />
-          </PaginationItem>
-        </PaginationContent>
-      </Pagination>
+        <div className="space-y-3">
+          {paginatedData.map((entry, index) => (
+            <div
+              key={index}
+              className="border border-gray-200 rounded-md shadow-sm p-3 w-full md:w-4/5 lg:w-3/4 mx-auto hover:bg-[#adadad7f] transition-colors"
+            >
+              <a
+                href={`https://open.spotify.com/search/${encodeURIComponent(
+                  entry.master_metadata_track_name || ""
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block"
+              >
+                <p className="font-medium truncate">
+                  {entry.master_metadata_track_name || "Unknown Track"}
+                </p>
+                <p className="text-sm text-gray-600">
+                  by{" "}
+                  {entry.master_metadata_album_artist_name || "Unknown Artist"}{" "}
+                </p>
+                {sortMethod !== "listens" && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {formatDate(entry.ts)}
+                  </p>
+                )}
+                {sortMethod === "listens" && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Listened{" "}
+                    {trackListenCounts.get(entry.spotify_track_uri)?.count || 0}{" "}
+                    times, Total:{" "}
+                    {msToMinutes(
+                      trackListenCounts.get(entry.spotify_track_uri)
+                        ?.totalMsPlayed || 0
+                    ).toFixed(2)}{" "}
+                    min
+                  </p>
+                )}
+              </a>
+            </div>
+          ))}
+        </div>
+
+        {/* Pagination */}
+        {listeningData.length > itemsPerPage && (
+          <div className="mt-8">
+            <Pagination>
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    className={`cursor-pointer ${
+                      page === 1 ? "opacity-50 pointer-events-none" : ""
+                    }`}
+                    onClick={() => handlePageChange(page - 1)}
+                  />
+                </PaginationItem>
+                <PaginationItem>
+                  <span className="cursor-default">
+                    Page {page} of{" "}
+                    {Math.ceil(listeningData.length / itemsPerPage)}
+                  </span>
+                </PaginationItem>
+                <PaginationItem>
+                  <PaginationNext
+                    className={`cursor-pointer ${
+                      page === Math.ceil(listeningData.length / itemsPerPage)
+                        ? "opacity-50 pointer-events-none"
+                        : ""
+                    }`}
+                    onClick={() => handlePageChange(page + 1)}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
