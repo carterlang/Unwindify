@@ -86,7 +86,7 @@ const App = () => {
   const [listeningData, setListeningData] = useState<ListeningEntry[]>([]);
   const [sortByListens, setSortByListens] = useState(false);
   const [page, setPage] = useState(1);
-  const itemsPerPage = 30;
+  const itemsPerPage = 10;
   const [originalData, setOriginalData] = useState<ListeningEntry[]>([]);
   const [trackListenCounts, setTrackListenCounts] = useState<
     Map<string, { count: number; entry: ListeningEntry; totalMsPlayed: number }>
@@ -282,6 +282,7 @@ const App = () => {
     setListeningData(sortedByListens);
     setTrackListenCounts(counts);
     setSortByListens(true);
+    setPage(1);
   };
 
   const sortByOldest = () => {
@@ -290,6 +291,7 @@ const App = () => {
     );
     setListeningData(sortedByDate);
     setSortByListens(false);
+    setPage(1);
   };
 
   const totalMsPlayed = listeningData.reduce(
@@ -311,81 +313,82 @@ const App = () => {
       newPage <= Math.ceil(listeningData.length / itemsPerPage)
     ) {
       setPage(newPage);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
 
   return (
-    <div style={{ padding: "20px", fontFamily: "Arial, sans-serif" }}>
-      <div className="flex justify-start">
-        <img src={Logo.src} alt="Logo" />
-      </div>
-      <div className="flex justify-end" id="top">
-        <DropdownMenu>
-          <DropdownMenuTrigger>
-            <Avatar className="bg-black">
-              <AvatarImage src="https://imgs.search.brave.com/FwvslqIfrJSkk_ce4dcoqQ-eCB4CoZ1iJQUytek5GFA/rs:fit:500:0:0:0/g:ce/aHR0cHM6Ly91cGxv/YWQud2lraW1lZGlh/Lm9yZy93aWtpcGVk/aWEvY29tbW9ucy8x/LzE5L1Nwb3RpZnlf/bG9nb193aXRob3V0/X3RleHQuc3Zn" />
-              <AvatarFallback>CN</AvatarFallback>
-            </Avatar>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuLabel>My Account</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>Profile</DropdownMenuItem>
-            <DropdownMenuItem>
-              <a
-                href="https://open.spotify.com"
-                className="flex justify-between"
-                target="_blank"
-              >
-                My Spotify
-                {<ExternalLink className="size-3" />}
-              </a>
-            </DropdownMenuItem>
-            <DropdownMenuItem>Help</DropdownMenuItem>
-            <DropdownMenuItem>Sign Out</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+    <div className="p-4 md:p-6 font-sans max-w-7xl mx-auto">
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+        <div className="flex items-center">
+          <img src={Logo.src} alt="Logo" className="h-10 w-auto" />
+        </div>
+        <div>
+          <DropdownMenu>
+            <DropdownMenuTrigger>
+              <Avatar className="bg-black">
+                <AvatarImage src="https://imgs.search.brave.com/FwvslqIfrJSkk_ce4dcoqQ-eCB4CoZ1iJQUytek5GFA/rs:fit:500:0:0:0/g:ce/aHR0cHM6Ly91cGxvYWQud2lraW1lZGlhLm9yZy93aWtpcGVkaWEvY29tbW9ucy8xLzE5L1Nwb3RpZnlfbG9nb193aXRob3V0X3RleHQuc3Zn" />
+                <AvatarFallback>CN</AvatarFallback>
+              </Avatar>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuLabel>My Account</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem>Profile</DropdownMenuItem>
+              <DropdownMenuItem>
+                <a
+                  href="https://open.spotify.com"
+                  className="flex justify-between"
+                  target="_blank"
+                >
+                  My Spotify
+                  {<ExternalLink className="size-3" />}
+                </a>
+              </DropdownMenuItem>
+              <DropdownMenuItem>Help</DropdownMenuItem>
+              <DropdownMenuItem>Sign Out</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
-      <div className="flex justify-center mt-3">
+      {/* File Upload Section */}
+      <div className="flex flex-col items-center mt-4 gap-4">
         <input
           type="file"
           accept=".json"
           multiple
           onChange={handleFileUpload}
-          className="border border-gray-200 p-2 rounded-md"
+          className="border border-gray-200 p-2 rounded-md w-full max-w-md"
         />
-      </div>
-      <div className="p-5 flex justify-center">
-        <p className="opacity-50">
-          <a href="../howto-page">
+        <p className="opacity-50 text-sm md:text-base text-center">
+          <a href="../howto-page" className="hover:underline">
             How to get my <strong>extended</strong> listening history?
           </a>
         </p>
       </div>
 
-      <div className="flex justify-center mt-3 gap-4">
-        <Card className="w-2/5">
+      {/* Stats Card */}
+      <div className="flex justify-center mt-6">
+        <Card className="w-full md:w-4/5 lg:w-2/3">
           <CardHeader>
             <CardTitle>Graphs!</CardTitle>
             <CardDescription>Your Spotify Listening History</CardDescription>
           </CardHeader>
-          <CardContent>
-            <h3>The graphs show:</h3>
-            <ol>
+          <CardContent className="space-y-2">
+            <h3 className="text-lg">The graphs show:</h3>
+            <ol className="list-decimal pl-5">
               <li>Your listening per month</li>
               <li>Your pickiness (aka skip rate)</li>
               <li>Time of day listening weight</li>
             </ol>
-          </CardContent>
-          <CardContent>
-            <p>Total Minutes Played: {totalMinutesPlayed.toFixed(2)}</p>
-            <p>Total Tracks Played: {totalTracksPlayed}</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
+              <p>Total Minutes Played: {totalMinutesPlayed.toFixed(2)}</p>
+              <p>Total Tracks Played: {totalTracksPlayed}</p>
+            </div>
           </CardContent>
           <CardFooter className="flex justify-between">
-            <p>
-              <strong>Demo</strong>
-            </p>
             <Button
               onClick={() => setShowGraphs(!showGraphs)}
               variant="outline"
@@ -398,15 +401,16 @@ const App = () => {
         </Card>
       </div>
 
+      {/* Graphs Section */}
       {showGraphs && (
         <div className="space-y-6 mt-6">
           {monthlyData.length > 0 && (
             <div className="flex justify-center">
-              <Card className="w-2/3">
+              <Card className="w-full md:w-4/5 lg:w-2/3">
                 <CardHeader>
                   <CardTitle>Monthly Listening Time</CardTitle>
                 </CardHeader>
-                <CardContent className="h-[400px]">
+                <CardContent className="h-[300px] sm:h-[400px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={monthlyData}>
                       <CartesianGrid strokeDasharray="3 3" />
@@ -441,11 +445,11 @@ const App = () => {
 
           {monthlySkipData.length > 0 && (
             <div className="flex justify-center">
-              <Card className="w-2/3">
+              <Card className="w-full md:w-4/5 lg:w-2/3">
                 <CardHeader>
                   <CardTitle>Pickiness Chart (Skipped Songs)</CardTitle>
                 </CardHeader>
-                <CardContent className="h-[400px]">
+                <CardContent className="h-[300px] sm:h-[400px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={monthlySkipData}>
                       <CartesianGrid strokeDasharray="3 3" />
@@ -483,11 +487,11 @@ const App = () => {
 
           {timeOfDayData.length > 0 && (
             <div className="flex justify-center">
-              <Card className="w-2/3">
+              <Card className="w-full md:w-4/5 lg:w-2/3">
                 <CardHeader>
                   <CardTitle>Listening Time by Hour of Day</CardTitle>
                 </CardHeader>
-                <CardContent className="h-[600px]">
+                <CardContent className="h-[400px] sm:h-[500px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
@@ -495,7 +499,7 @@ const App = () => {
                         cx="50%"
                         cy="50%"
                         labelLine={false}
-                        outerRadius={150}
+                        outerRadius={120}
                         fill="#8884d8"
                         dataKey="minutes"
                         nameKey="hour"
@@ -525,13 +529,14 @@ const App = () => {
         </div>
       )}
 
+      {/* Longest Stretch Section */}
       {longestStretch && (
         <div className="flex justify-center mt-6">
-          <Card className="w-2/3">
+          <Card className="w-full md:w-4/5 lg:w-2/3">
             <CardHeader>
               <CardTitle>Longest Stretch Between Listening</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-2">
               <p>
                 <strong>Start:</strong> {formatDate(longestStretch.start)}
               </p>
@@ -547,75 +552,98 @@ const App = () => {
         </div>
       )}
 
-      <h2 className="font-bold flex justify-center mt-3 text-[20px]">
-        All Listening Entries
-      </h2>
-      <Button
-        className="mt-8 mb-4"
-        onClick={sortByListens ? sortByOldest : sortByMostListens}
-      >
-        {sortByListens ? "Sort by Oldest" : "Sort by Most Listens"}
-      </Button>
-      <ol className="list-decimal">
-        {paginatedData.map((entry, index) => (
-          <li
-            key={index}
-            className="border border-gray-200 m-4 rounded-md shadow-md p-3 w-1/2"
+      {/* Listening Entries Section */}
+      <div className="mt-8">
+        <h2 className="font-bold text-center text-xl md:text-2xl mb-4">
+          All Listening Entries
+        </h2>
+        <div className="flex justify-center">
+          <Button
+            onClick={sortByListens ? sortByOldest : sortByMostListens}
+            className="mb-6"
           >
-            <a
-              href={`https://open.spotify.com/search/${entry.master_metadata_track_name}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {entry.master_metadata_track_name} by{" "}
-              {entry.master_metadata_album_artist_name} -{" "}
-              {msToMinutes(entry.ms_played).toFixed(2)} min
-              {!sortByListens && <span> ({formatDate(entry.ts)})</span>}
-              {sortByListens && (
-                <span>
-                  {" "}
-                  (Listened{" "}
-                  {trackListenCounts.get(entry.spotify_track_uri)?.count} times,
-                  Total:{" "}
-                  {msToMinutes(
-                    trackListenCounts.get(entry.spotify_track_uri)
-                      ?.totalMsPlayed || 0
-                  ).toFixed(2)}{" "}
-                  min)
-                </span>
-              )}
-            </a>
-          </li>
-        ))}
-      </ol>
+            {sortByListens ? "Sort by Oldest" : "Sort by Most Listens"}
+          </Button>
+        </div>
 
-      <Pagination id="bottom">
-        <PaginationContent>
-          <PaginationItem>
-            <PaginationPrevious
-              className={`cursor-pointer ${
-                page === 1 ? "opacity-50 pointer-events-none" : ""
-              }`}
-              onClick={() => handlePageChange(page - 1)}
-            />
-          </PaginationItem>
-          <PaginationItem>
-            <span className="cursor-default">
-              Page {page} of {Math.ceil(listeningData.length / itemsPerPage)}
-            </span>
-          </PaginationItem>
-          <PaginationItem>
-            <PaginationNext
-              className={`cursor-pointer ${
-                page === Math.ceil(listeningData.length / itemsPerPage)
-                  ? "opacity-50 pointer-events-none"
-                  : ""
-              }`}
-              onClick={() => handlePageChange(page + 1)}
-            />
-          </PaginationItem>
-        </PaginationContent>
-      </Pagination>
+        <div className="space-y-3">
+          {paginatedData.map((entry, index) => (
+            <div
+              key={index}
+              className="border border-gray-200 rounded-md shadow-sm p-3 w-full md:w-4/5 lg:w-3/4 mx-auto hover:bg-gray-50 transition-colors"
+            >
+              <a
+                href={`https://open.spotify.com/search/${encodeURIComponent(
+                  entry.master_metadata_track_name || ""
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block"
+              >
+                <p className="font-medium truncate">
+                  {entry.master_metadata_track_name || "Unknown Track"}
+                </p>
+                <p className="text-sm text-gray-600">
+                  by{" "}
+                  {entry.master_metadata_album_artist_name || "Unknown Artist"}{" "}
+                  - {msToMinutes(entry.ms_played).toFixed(2)} min
+                </p>
+                {!sortByListens && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {formatDate(entry.ts)}
+                  </p>
+                )}
+                {sortByListens && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Listened{" "}
+                    {trackListenCounts.get(entry.spotify_track_uri)?.count || 0}{" "}
+                    times, Total:{" "}
+                    {msToMinutes(
+                      trackListenCounts.get(entry.spotify_track_uri)
+                        ?.totalMsPlayed || 0
+                    ).toFixed(2)}{" "}
+                    min
+                  </p>
+                )}
+              </a>
+            </div>
+          ))}
+        </div>
+
+        {/* Pagination */}
+        {listeningData.length > itemsPerPage && (
+          <div className="mt-8">
+            <Pagination>
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    className={`cursor-pointer ${
+                      page === 1 ? "opacity-50 pointer-events-none" : ""
+                    }`}
+                    onClick={() => handlePageChange(page - 1)}
+                  />
+                </PaginationItem>
+                <PaginationItem>
+                  <span className="cursor-default">
+                    Page {page} of{" "}
+                    {Math.ceil(listeningData.length / itemsPerPage)}
+                  </span>
+                </PaginationItem>
+                <PaginationItem>
+                  <PaginationNext
+                    className={`cursor-pointer ${
+                      page === Math.ceil(listeningData.length / itemsPerPage)
+                        ? "opacity-50 pointer-events-none"
+                        : ""
+                    }`}
+                    onClick={() => handlePageChange(page + 1)}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
