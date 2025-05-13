@@ -597,7 +597,6 @@ const App = () => {
                 page === 1 ? "opacity-50 pointer-events-none" : ""
               }`}
               onClick={() => handlePageChange(page - 1)}
-              aria-disabled={page === 1}
             />
           </PaginationItem>
           <PaginationItem>
@@ -613,9 +612,6 @@ const App = () => {
                   : ""
               }`}
               onClick={() => handlePageChange(page + 1)}
-              aria-disabled={
-                page === Math.ceil(listeningData.length / itemsPerPage)
-              }
             />
           </PaginationItem>
         </PaginationContent>
