@@ -41,6 +41,7 @@ import {
   Pie,
   Cell,
 } from "recharts";
+import Logo from "@/img/favicon.jpeg";
 
 interface ListeningEntry {
   ts: string;
@@ -315,6 +316,9 @@ const App = () => {
 
   return (
     <div style={{ padding: "20px", fontFamily: "Arial, sans-serif" }}>
+      <div className="flex justify-start">
+        <img src={Logo.src} alt="Logo" />
+      </div>
       <div className="flex justify-end" id="top">
         <DropdownMenu>
           <DropdownMenuTrigger>
@@ -352,22 +356,30 @@ const App = () => {
           className="border border-gray-200 p-2 rounded-md"
         />
       </div>
+      <div className="p-5 flex justify-center">
+        <p className="opacity-50">
+          <a href="../howto-page">
+            How to get my <strong>extended</strong> listening history?
+          </a>
+        </p>
+      </div>
 
       <div className="flex justify-center mt-3 gap-4">
         <Card className="w-2/5">
           <CardHeader>
-            <CardTitle>Listening Summary</CardTitle>
+            <CardTitle>Graphs!</CardTitle>
             <CardDescription>Your Spotify Listening History</CardDescription>
           </CardHeader>
           <CardContent>
-            <p>
-              The graphs show: Your listening trends over months How picky
-              you've been with songs (skip rate) When during the day you listen
-              to music most
-            </p>
-            <p>Total Minutes Played: {totalMinutesPlayed.toFixed(2)}</p>
+            <h3>The graphs show:</h3>
+            <ol>
+              <li>Your listening per month</li>
+              <li>Your pickiness (aka skip rate)</li>
+              <li>Time of day listening weight</li>
+            </ol>
           </CardContent>
           <CardContent>
+            <p>Total Minutes Played: {totalMinutesPlayed.toFixed(2)}</p>
             <p>Total Tracks Played: {totalTracksPlayed}</p>
           </CardContent>
           <CardFooter className="flex justify-between">
@@ -407,8 +419,8 @@ const App = () => {
                         }}
                       />
                       <Tooltip
-                        formatter={(value) => [
-                          `${value} minutes`,
+                        formatter={(value: number) => [
+                          `${Math.round(value)} minutes`,
                           "Listening Time",
                         ]}
                       />
@@ -499,8 +511,8 @@ const App = () => {
                         ))}
                       </Pie>
                       <Tooltip
-                        formatter={(value) => [
-                          `${value} minutes`,
+                        formatter={(value: number) => [
+                          `${Math.round(value)} minutes`,
                           "Listening Time",
                         ]}
                       />
@@ -581,9 +593,11 @@ const App = () => {
         <PaginationContent>
           <PaginationItem>
             <PaginationPrevious
-              className="cursor-pointer"
+              className={`cursor-pointer ${
+                page === 1 ? "opacity-50 pointer-events-none" : ""
+              }`}
               onClick={() => handlePageChange(page - 1)}
-              disabled={page === 1}
+              aria-disabled={page === 1}
             />
           </PaginationItem>
           <PaginationItem>
@@ -593,9 +607,15 @@ const App = () => {
           </PaginationItem>
           <PaginationItem>
             <PaginationNext
-              className="cursor-pointer"
+              className={`cursor-pointer ${
+                page === Math.ceil(listeningData.length / itemsPerPage)
+                  ? "opacity-50 pointer-events-none"
+                  : ""
+              }`}
               onClick={() => handlePageChange(page + 1)}
-              disabled={page === Math.ceil(listeningData.length / itemsPerPage)}
+              aria-disabled={
+                page === Math.ceil(listeningData.length / itemsPerPage)
+              }
             />
           </PaginationItem>
         </PaginationContent>
