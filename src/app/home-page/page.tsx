@@ -86,8 +86,8 @@ const COLORS = [
 
 // Initialize Spotify API
 const spotifyApi = new SpotifyWebApi({
-  clientId: process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID,
-  redirectUri: process.env.NEXT_PUBLIC_SPOTIFY_REDIRECT_URI,
+  clientId: "fff5fda968834ab8a5437e9e75f9cdd8",
+  redirectUri: "https://unwindify.vercel.app/home-page/callback",
 });
 
 const SPOTIFY_SCOPES = ["user-read-recently-played", "user-top-read"];
