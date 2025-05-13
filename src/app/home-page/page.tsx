@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -42,6 +42,8 @@ import {
   Cell,
 } from "recharts";
 import Logo from "@/img/favicon.jpeg";
+import { Label } from "@/components/ui/label";
+import SpotifyWebApi from "spotify-web-api-node";
 
 interface ListeningEntry {
   ts: string;
@@ -82,9 +84,19 @@ const COLORS = [
   "#82ca9d",
 ];
 
+// Initialize Spotify API
+const spotifyApi = new SpotifyWebApi({
+  clientId: process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID,
+  redirectUri: process.env.NEXT_PUBLIC_SPOTIFY_REDIRECT_URI,
+});
+
+const SPOTIFY_SCOPES = ["user-read-recently-played", "user-top-read"];
+
 const App = () => {
   const [listeningData, setListeningData] = useState<ListeningEntry[]>([]);
-  const [sortByListens, setSortByListens] = useState(false);
+  const [sortMethod, setSortMethod] = useState<"oldest" | "newest" | "listens">(
+    "oldest"
+  );
   const [page, setPage] = useState(1);
   const itemsPerPage = 10;
   const [originalData, setOriginalData] = useState<ListeningEntry[]>([]);
@@ -109,6 +121,79 @@ const App = () => {
   const [timeOfDayData, setTimeOfDayData] = useState<
     { hour: string; minutes: number }[]
   >([]);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userProfile, setUserProfile] = useState<any>(null);
+
+  // Check for access token on initial load
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const accessToken = params.get("access_token");
+    const expiresIn = params.get("expires_in");
+
+    if (accessToken) {
+      spotifyApi.setAccessToken(accessToken);
+      setIsAuthenticated(true);
+      fetchUserProfile();
+      fetchRecentHistory();
+
+      // Clear token from URL
+      window.history.pushState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
+  const handleSpotifyLogin = () => {
+    const authUrl = `https://accounts.spotify.com/authorize?client_id=${
+      process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID
+    }&redirect_uri=${encodeURIComponent(
+      process.env.NEXT_PUBLIC_SPOTIFY_REDIRECT_URI || ""
+    )}&scope=${SPOTIFY_SCOPES.join(
+      "%20"
+    )}&response_type=token&show_dialog=true`;
+    window.location.href = authUrl;
+  };
+
+  const fetchUserProfile = async () => {
+    try {
+      const data = await spotifyApi.getMe();
+      setUserProfile(data.body);
+    } catch (err) {
+      console.error("Failed to fetch user profile:", err);
+    }
+  };
+
+  const fetchRecentHistory = async () => {
+    try {
+      // Get recently played tracks
+      const recentTracks = await spotifyApi.getMyRecentlyPlayedTracks({
+        limit: 50,
+      });
+
+      // Convert to your ListeningEntry format
+      const historyData = recentTracks.body.items.map((item) => ({
+        ts: item.played_at,
+        platform: "spotify",
+        ms_played: item.track.duration_ms,
+        master_metadata_track_name: item.track.name,
+        master_metadata_album_artist_name: item.track.artists[0]?.name,
+        master_metadata_album_album_name: item.track.album.name,
+        spotify_track_uri: item.track.uri,
+        reason_start: "playback",
+        reason_end: "trackdone",
+        shuffle: false,
+        skipped: false,
+        offline: false,
+        offline_timestamp: null,
+        incognito_mode: false,
+      }));
+
+      setOriginalData(historyData);
+      setListeningData(historyData);
+      calculateArtistStats(historyData);
+      calculateChartData(historyData);
+    } catch (err) {
+      console.error("Failed to fetch recent history:", err);
+    }
+  };
 
   const calculateChartData = (data: ListeningEntry[]) => {
     const monthlyMap = new Map<string, number>();
@@ -168,6 +253,15 @@ const App = () => {
             parseInt(a.hour.split(":")[0]) - parseInt(b.hour.split(":")[0])
         )
     );
+  };
+
+  const sortByNewest = () => {
+    const sortedByDate = [...originalData].sort(
+      (a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime()
+    );
+    setListeningData(sortedByDate);
+    setSortMethod("newest");
+    setPage(1);
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -256,6 +350,7 @@ const App = () => {
   };
 
   const sortByMostListens = () => {
+    setSortMethod("listens");
     const counts = new Map<
       string,
       { count: number; entry: ListeningEntry; totalMsPlayed: number }
@@ -281,7 +376,6 @@ const App = () => {
 
     setListeningData(sortedByListens);
     setTrackListenCounts(counts);
-    setSortByListens(true);
     setPage(1);
   };
 
@@ -290,7 +384,7 @@ const App = () => {
       (a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime()
     );
     setListeningData(sortedByDate);
-    setSortByListens(false);
+    setSortMethod("oldest");
     setPage(1);
   };
 
@@ -322,69 +416,108 @@ const App = () => {
       {/* Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
         <div className="flex items-center">
-          <img src={Logo.src} alt="Logo" className="h-10 w-auto" />
+          <img src={Logo.src} alt="Logo" className="h-10 w-auto rounded-lg" />
+          <Label> </Label>
         </div>
-        <div>
-          <DropdownMenu>
-            <DropdownMenuTrigger>
-              <Avatar className="bg-black">
-                <AvatarImage src="https://imgs.search.brave.com/FwvslqIfrJSkk_ce4dcoqQ-eCB4CoZ1iJQUytek5GFA/rs:fit:500:0:0:0/g:ce/aHR0cHM6Ly91cGxvYWQud2lraW1lZGlhLm9yZy93aWtpcGVkaWEvY29tbW9ucy8xLzE5L1Nwb3RpZnlfbG9nb193aXRob3V0X3RleHQuc3Zn" />
-                <AvatarFallback>CN</AvatarFallback>
+        <div className="flex items-center gap-4">
+          {userProfile && (
+            <div className="hidden md:flex items-center gap-2">
+              <Avatar>
+                <AvatarImage
+                  src={
+                    userProfile.images?.[0]?.url ||
+                    "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRslcO84eWfXP_4Ucd4Yfz6B8uqJmHaTo0iTw&s"
+                  }
+                />
+                <AvatarFallback>
+                  {userProfile.display_name?.charAt(0) || "U"}
+                </AvatarFallback>
               </Avatar>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuLabel>My Account</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>Profile</DropdownMenuItem>
-              <DropdownMenuItem>
-                <a
-                  href="https://open.spotify.com"
-                  className="flex justify-between"
-                  target="_blank"
-                >
-                  My Spotify
-                  {<ExternalLink className="size-3" />}
-                </a>
-              </DropdownMenuItem>
-              <DropdownMenuItem>Help</DropdownMenuItem>
-              <DropdownMenuItem>Sign Out</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+              <span>{userProfile.display_name}</span>
+            </div>
+          )}
+          {!isAuthenticated ? (
+            <Button onClick={handleSpotifyLogin}>Connect Spotify</Button>
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger>
+                <Avatar className="bg-white">
+                  <AvatarImage
+                    className="bg-white"
+                    src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRslcO84eWfXP_4Ucd4Yfz6B8uqJmHaTo0iTw&s"
+                  />
+                  <AvatarFallback>CN</AvatarFallback>
+                </Avatar>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem>Profile</DropdownMenuItem>
+                <DropdownMenuItem>
+                  <a
+                    href="https://open.spotify.com"
+                    className="flex justify-between"
+                    target="_blank"
+                  >
+                    My Spotify
+                    {<ExternalLink className="size-3" />}
+                  </a>
+                </DropdownMenuItem>
+                <DropdownMenuItem>Help</DropdownMenuItem>
+                <DropdownMenuItem>Sign Out</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </div>
 
       {/* File Upload Section */}
       <div className="flex flex-col items-center mt-4 gap-4">
-        <input
-          type="file"
-          accept=".json"
-          multiple
-          onChange={handleFileUpload}
-          className="border border-gray-200 p-2 rounded-md w-full max-w-md"
-        />
+        {!isAuthenticated ? (
+          <Button onClick={handleSpotifyLogin} className="w-full max-w-md">
+            Connect Spotify to view your recent history
+          </Button>
+        ) : (
+          <Button
+            onClick={fetchRecentHistory}
+            variant="outline"
+            className="w-full max-w-md"
+          >
+            Refresh Recent History
+          </Button>
+        )}
+
         <p className="opacity-50 text-sm md:text-base text-center">
+          Or{" "}
+          <input
+            type="file"
+            accept=".json"
+            multiple
+            onChange={handleFileUpload}
+            className="border-b border-gray-400 bg-transparent cursor-pointer"
+          />{" "}
+          your extended history
+        </p>
+        <p className="opacity-50 text-sm md:text-base text-center">
+          Need Help?{" "}
           <a href="../howto-page" className="hover:underline">
-            How to get my <strong>extended</strong> listening history?
+            <em>
+              How to get my <strong>extended</strong> listening history?
+            </em>
           </a>
         </p>
       </div>
 
       {/* Stats Card */}
       <div className="flex justify-center mt-6">
-        <Card className="w-full md:w-4/5 lg:w-2/3">
+        <Card className="w-full md:w-4/5 lg:w-2/3 bg-[#1ed75fd0] hover:shadow-lg">
           <CardHeader>
-            <CardTitle>Graphs!</CardTitle>
-            <CardDescription>Your Spotify Listening History</CardDescription>
+            <CardTitle>Your Spotify Listening History</CardTitle>
+            <CardDescription></CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            <h3 className="text-lg">The graphs show:</h3>
-            <ol className="list-decimal pl-5">
-              <li>Your listening per month</li>
-              <li>Your pickiness (aka skip rate)</li>
-              <li>Time of day listening weight</li>
-            </ol>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
-              <p>Total Minutes Played: {totalMinutesPlayed.toFixed(2)}</p>
+              <p>Total Minutes Played: {totalMinutesPlayed.toFixed(0)}</p>
               <p>Total Tracks Played: {totalTracksPlayed}</p>
             </div>
           </CardContent>
@@ -532,7 +665,7 @@ const App = () => {
       {/* Longest Stretch Section */}
       {longestStretch && (
         <div className="flex justify-center mt-6">
-          <Card className="w-full md:w-4/5 lg:w-2/3">
+          <Card className="w-full md:w-4/5 lg:w-2/3 bg-[#1ed75fd0] hover:shadow-lg">
             <CardHeader>
               <CardTitle>Longest Stretch Between Listening</CardTitle>
             </CardHeader>
@@ -544,7 +677,7 @@ const App = () => {
                 <strong>End:</strong> {formatDate(longestStretch.end)}
               </p>
               <p>
-                <strong>Duration:</strong> {longestStretch.minutes.toFixed(2)}{" "}
+                <strong>Duration:</strong> {longestStretch.minutes.toFixed(0)}{" "}
                 minutes
               </p>
             </CardContent>
@@ -559,10 +692,16 @@ const App = () => {
         </h2>
         <div className="flex justify-center">
           <Button
-            onClick={sortByListens ? sortByOldest : sortByMostListens}
+            onClick={() => {
+              if (sortMethod === "oldest") sortByNewest();
+              else if (sortMethod === "newest") sortByMostListens();
+              else sortByOldest();
+            }}
             className="mb-6"
           >
-            {sortByListens ? "Sort by Oldest" : "Sort by Most Listens"}
+            {sortMethod === "oldest" && "Sort by Newest"}
+            {sortMethod === "newest" && "Sort by Most Listens"}
+            {sortMethod === "listens" && "Sort by Oldest"}
           </Button>
         </div>
 
@@ -570,7 +709,7 @@ const App = () => {
           {paginatedData.map((entry, index) => (
             <div
               key={index}
-              className="border border-gray-200 rounded-md shadow-sm p-3 w-full md:w-4/5 lg:w-3/4 mx-auto hover:bg-gray-50 transition-colors"
+              className="border border-gray-200 rounded-md shadow-sm p-3 w-full md:w-4/5 lg:w-3/4 mx-auto hover:bg-[#adadad7f] transition-colors"
             >
               <a
                 href={`https://open.spotify.com/search/${encodeURIComponent(
@@ -586,14 +725,13 @@ const App = () => {
                 <p className="text-sm text-gray-600">
                   by{" "}
                   {entry.master_metadata_album_artist_name || "Unknown Artist"}{" "}
-                  - {msToMinutes(entry.ms_played).toFixed(2)} min
                 </p>
-                {!sortByListens && (
+                {sortMethod !== "listens" && (
                   <p className="text-xs text-gray-500 mt-1">
                     {formatDate(entry.ts)}
                   </p>
                 )}
-                {sortByListens && (
+                {sortMethod === "listens" && (
                   <p className="text-xs text-gray-500 mt-1">
                     Listened{" "}
                     {trackListenCounts.get(entry.spotify_track_uri)?.count || 0}{" "}
