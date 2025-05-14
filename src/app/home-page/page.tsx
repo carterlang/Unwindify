@@ -142,14 +142,32 @@ const App = () => {
   }, []);
 
   const handleSpotifyLogin = () => {
-    const authUrl = `https://accounts.spotify.com/authorize?client_id=${
+    // Verify env vars exist
+    if (
+      !process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID ||
+      !process.env.NEXT_PUBLIC_SPOTIFY_REDIRECT_URI
+    ) {
+      console.error("Missing Spotify environment variables!");
+      return;
+    }
+
+    const authUrl = new URL("https://accounts.spotify.com/authorize");
+    authUrl.searchParams.append(
+      "client_id",
       process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID
-    }&redirect_uri=${encodeURIComponent(
-      process.env.NEXT_PUBLIC_SPOTIFY_REDIRECT_URI || ""
-    )}&scope=${SPOTIFY_SCOPES.join(
-      "%20"
-    )}&response_type=token&show_dialog=true`;
-    window.location.href = authUrl;
+    );
+    authUrl.searchParams.append(
+      "redirect_uri",
+      process.env.NEXT_PUBLIC_SPOTIFY_REDIRECT_URI
+    );
+    authUrl.searchParams.append(
+      "scope",
+      "user-read-recently-played user-top-read"
+    );
+    authUrl.searchParams.append("response_type", "token");
+    authUrl.searchParams.append("show_dialog", "true");
+
+    window.location.href = authUrl.toString();
   };
 
   const fetchUserProfile = async () => {
